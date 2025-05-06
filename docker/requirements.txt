@@ -1,2 +1,6 @@
 boto3
 psycopg2-binary
+streamlit
+plotly
+pandas
+numpy

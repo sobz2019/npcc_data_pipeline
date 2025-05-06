@@ -23,4 +23,4 @@ The Data Analytics team are interested in answering the following questions;
 
 ## Interview 
 
-At the interview, you'll be invited to present your solution and the process by which you developed it. The interviewers will then ask a few follow-up questions about the design choices that you've made. 
+At the interview, you'll be invited to present your solution and the process by which you developed it. The interviewers will then ask a few follow-up questions about the design choices that you've made.  
