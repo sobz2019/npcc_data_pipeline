@@ -1,0 +1,7 @@
+{
+    "jdbc_url": "jdbc:postgresql://host.docker.internal:5432/mydb",
+    "table_name": "perfmon.sales",
+    "db_user": "postgres",
+    "db_password": "admin",
+    "primary_key": "salesid"
+}

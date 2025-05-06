@@ -20,9 +20,6 @@ The Data Analytics team are interested in answering the following questions;
 
 (You should use the above questions to help you design your solution. You do not have to answer these questions as part of the exercise)
 
-## Submission 
-
-Please submit any code, documentation, notes or designs that you've produced as part of this task to ben.corcoran@nspcc.org.uk before 9am on Wednesday 14th May. 
 
 ## Interview 
 

@@ -1,0 +1,282 @@
+version: '3'
+
+# ------------------------
+# Airflow Services
+# ------------------------
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  airflow-webserver:
+    build:
+      context: ./docker
+      dockerfile: airflow/Dockerfile
+    image: custom-airflow:latest
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+      AIRFLOW_CONN_AWS_DEFAULT: 'aws://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@'
+      AIRFLOW_VAR_S3_BUCKET: '${S3_BUCKET:-my-data-bucket}'
+      AIRFLOW_VAR_AWS_ACCESS_KEY_ID: '${AWS_ACCESS_KEY_ID}'
+      AIRFLOW_VAR_AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}'
+      AIRFLOW_VAR_S3_ENDPOINT: '${S3_ENDPOINT:-s3.amazonaws.com}'
+      AIRFLOW_VAR_JDBC_URL: ${JDBC_URL:-jdbc:postgresql://host.docker.internal:5432/postgres}
+      AIRFLOW_VAR_DB_USER: ${DB_USER:-postgres}
+      AIRFLOW_VAR_DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      AIRFLOW_CONN_SPARK_DEFAULT: 'spark://spark-master:7077'
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./checkpoint:/opt/airflow/checkpoint
+      - ./config.json:/opt/airflow/config.json
+    restart: always
+
+  airflow-scheduler:
+    build:
+      context: ./docker
+      dockerfile: airflow/Dockerfile
+    image: custom-airflow:latest
+    command: scheduler
+    depends_on:
+      - postgres
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW_CONN_AWS_DEFAULT: 'aws://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@'
+      AIRFLOW_VAR_S3_BUCKET: ${S3_BUCKET:-my-data-bucket}
+      AIRFLOW_VAR_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AIRFLOW_VAR_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AIRFLOW_VAR_S3_ENDPOINT: ${S3_ENDPOINT:-s3.amazonaws.com}
+      AIRFLOW_VAR_JDBC_URL: ${JDBC_URL:-jdbc:postgresql://host.docker.internal:5432/postgres}
+      AIRFLOW_VAR_DB_USER: ${DB_USER:-postgres}
+      AIRFLOW_VAR_DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      AIRFLOW_CONN_SPARK_DEFAULT: 'spark://spark-master:7077'
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./checkpoint:/opt/airflow/checkpoint
+      - ./config.json:/opt/airflow/config.json
+    restart: always
+
+  airflow-triggerer:
+    build:
+      context: ./docker
+      dockerfile: airflow/Dockerfile
+    image: custom-airflow:latest
+    command: triggerer
+    depends_on:
+      - postgres
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./checkpoint:/opt/airflow/checkpoint
+      - ./config.json:/opt/airflow/config.json
+    restart: always
+
+  airflow-init:
+    build:
+      context: ./docker
+      dockerfile: airflow/Dockerfile
+    image: custom-airflow:latest
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create --username airflow --firstname Airflow --lastname Admin \
+          --role Admin --email airflow@example.com --password airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./checkpoint:/opt/airflow/checkpoint
+      - ./config.json:/opt/airflow/config.json
+    restart: on-failure
+
+# ------------------------
+# Spark Cluster
+# # ------------------------
+#   zookeeper:
+#     image: confluentinc/cp-zookeeper:7.4.0
+#     hostname: zookeeper
+#     container_name: zookeeper
+#     ports:
+#       - "22182:2181"
+#     environment:
+#       ZOOKEEPER_CLIENT_PORT: 2181
+#       ZOOKEEPER_TICK_TIME: 2000
+#     healthcheck:
+#       test: ['CMD', 'bash', '-c', "echo 'Are you okay' | nc localhost 2181"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#     networks:
+#       - datamasterylab
+
+#   broker:
+#     image: confluentinc/cp-server:7.4.0
+#     hostname: broker
+#     container_name: broker
+#     depends_on:
+#       zookeeper:
+#         condition: service_healthy
+#     ports:
+#       - "9092:9092"
+#       - "9101:9101"
+#     environment:
+#       KAFKA_BROKER_ID: 1
+#       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+#       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+#       KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+#       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+#       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+#       KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+#       KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+#       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+#       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+#       KAFKA_JMX_PORT: 9101
+#       KAFKA_JMX_HOSTNAME: localhost
+#       KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+#       KAFKA_CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: broker:29092
+#       KAFKA_METRIC_REPORTER_TOPIC_REPLICAS: 1
+#       CONFLUENT_METRICS_ENABLE: 'false'
+#       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+#     healthcheck:
+#       test: ['CMD', 'bash', '-c', "nc -z localhost 9092"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#     networks:
+#       - datamasterylab
+
+  spark-master:
+    build:
+      context: ./docker
+      dockerfile: spark/Dockerfile
+    image: custom-spark:latest
+    volumes:
+      - ./jobs:/opt/bitnami/spark/jobs
+      - ./scripts:/opt/bitnami/spark/scripts
+      - ./checkpoint:/opt/bitnami/spark/checkpoint
+      - ./config.json:/opt/bitnami/spark/config.json
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      # Add S3 credentials as environment variables
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # - S3_ENDPOINT=${S3_ENDPOINT:-s3.amazonaws.com}
+      # - S3_BUCKET=${S3_BUCKET:-my-data-bucket}
+      - JDBC_URL=${JDBC_URL:-jdbc:postgresql://host.docker.internal:5432/postgres}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    ports:
+      - "9090:8080"
+      - "7077:7077"
+    networks:
+      - npcclab
+      
+  spark-common: &spark-common
+    build:
+      context: ./docker
+      dockerfile: spark/Dockerfile
+    image: custom-spark:latest
+    volumes:
+      - ./jobs:/opt/bitnami/spark/jobs
+      - ./scripts:/opt/bitnami/spark/scripts
+      - ./checkpoint:/opt/bitnami/spark/checkpoint
+      - ./config.json:/opt/bitnami/spark/config.json
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      # Environment variables from .env
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # - S3_ENDPOINT=${S3_ENDPOINT:-s3.amazonaws.com}
+      # - S3_BUCKET=${S3_BUCKET:-my-data-bucket}
+      - JDBC_URL=${JDBC_URL:-jdbc:postgresql://host.docker.internal:5432/postgres}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    depends_on:
+      - spark-master
+    networks:
+      - npcclab
+  spark_worker1:
+    <<: *spark-common
+  spark_worker2:
+    <<: *spark-common
+  
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+    depends_on:
+      - broker
+      - zookeeper
+      - schema-registry
+    networks:
+      - npcclab
+  
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.4.0
+    container_name: schema-registry
+    depends_on:
+      - broker
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://broker:29092
+    networks:
+      - npcclab
+
+volumes:
+  postgres-db-volume:
+
+networks:
+  npcclab:
